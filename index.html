@@ -1,0 +1,2483 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Rechnungsverwaltung – Mitgliederbeiträge & Rechnungen</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; margin: 40px; }
+  .container { max-width: 1400px; margin: 0 auto; }
+  
+  /* Tabs */
+  .tabs { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 20px; }
+  .tab { padding: 12px 24px; cursor: pointer; border: none; background: none; font-size: 16px; }
+  .tab.active { border-bottom: 3px solid #2196F3; font-weight: bold; color: #2196F3; }
+  .tab:hover { background: #f5f5f5; }
+  
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  
+  /* Formulare */
+  form input, form select, form button, form textarea { margin: 5px 0; padding: 6px; }
+  form input[type="text"], form input[type="email"], form input[type="number"], form select, form textarea { width: 100%; box-sizing: border-box; }
+  form button { width: 100%; }
+  
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .form-full { margin-bottom: 10px; }
+  
+  /* Positionsverwaltung für normale Rechnungen */
+  .positions-container { border: 1px solid #ddd; padding: 15px; margin: 15px 0; background: #f9f9f9; }
+  .position-item { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 40px; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .position-item input { margin: 0; }
+  .position-item button { padding: 4px 8px; }
+  .add-position-btn { margin-top: 10px; }
+  .total-display { font-size: 18px; font-weight: bold; text-align: right; margin-top: 10px; }
+  
+  /* Tabelle */
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+  th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+  th { background: #f0f0f0; }
+  
+  tr.paid { background: #e0ffe0; }
+  tr.reminder1 { background: #fff3cd; }
+  tr.reminder2 { background: #ffddaa; }
+  tr.reminder3 { background: #ffcccc; }
+  
+  button.small { padding: 4px 8px; margin-right: 5px; font-size: 0.9em; }
+  .tools { margin: 20px 0; }
+  
+  .status-badge { 
+    display: inline-block; 
+    padding: 2px 8px; 
+    border-radius: 3px; 
+    font-size: 0.85em;
+    font-weight: bold;
+  }
+  .status-offen { background: #ffc107; color: #000; }
+  .status-mahnung1 { background: #ff9800; color: #fff; }
+  .status-mahnung2 { background: #ff5722; color: #fff; }
+  .status-mahnung3 { background: #d32f2f; color: #fff; }
+  .status-bezahlt { background: #4caf50; color: #fff; }
+  
+  .type-badge { 
+    display: inline-block; 
+    padding: 2px 8px; 
+    border-radius: 3px; 
+    font-size: 0.85em;
+    font-weight: bold;
+  }
+  .type-membership { background: #2196F3; color: #fff; }
+  .type-invoice { background: #9C27B0; color: #fff; }
+  
+  .legend { margin: 20px 0; padding: 10px; background: #f9f9f9; border: 1px solid #ddd; }
+  .legend span { margin-right: 15px; }
+  
+  .filter-bar { margin: 15px 0; padding: 10px; background: #f5f5f5; border: 1px solid #ddd; }
+  .filter-bar select { padding: 8px; margin-right: 10px; }
+  
+  /* Kompakte Übersichtstabellen */
+  .recent-invoices { margin-top: 30px; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; }
+  .recent-invoices h4 { margin-top: 0; margin-bottom: 15px; color: #333; }
+  .recent-invoices table { font-size: 0.9em; }
+  .recent-invoices td, .recent-invoices th { padding: 6px 8px; }
+  .recent-invoices .empty-state { text-align: center; padding: 20px; color: #999; font-style: italic; }
+  
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: flex-start; padding-top: 40px; overflow-y: auto; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: #fff; border-radius: 8px; padding: 30px; width: 90%; max-width: 700px; margin-bottom: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+  .modal h3 { margin-top: 0; margin-bottom: 20px; }
+  .modal .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .modal .form-full { margin-bottom: 10px; }
+  .modal label { display: block; font-size: 0.85em; color: #666; margin-bottom: 2px; }
+  .modal input, .modal select, .modal textarea { width: 100%; box-sizing: border-box; padding: 6px; margin: 2px 0; }
+  .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-buttons button { flex: 1; padding: 10px; font-size: 1em; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; }
+  .btn-save { background: #2196F3; color: #fff; border-color: #2196F3 !important; }
+  .btn-save:hover { background: #1976D2; }
+  .btn-delete { background: #f44336; color: #fff; border-color: #f44336 !important; }
+  .btn-delete:hover { background: #d32f2f; }
+  .btn-cancel { background: #f5f5f5; }
+  .btn-cancel:hover { background: #e0e0e0; }
+  
+  /* Edit-Positionen im Modal */
+  .modal .position-item { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 40px; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .modal .position-item input { margin: 0; }
+  .modal .position-item button { padding: 4px 8px; }
+  
+  /* Personen-Datenbank / Autocomplete */
+  .autocomplete-wrapper { position: relative; }
+  .autocomplete-dropdown {
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    background: white;
+    border: 1px solid #2196F3;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    z-index: 200;
+    max-height: 220px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }
+  .autocomplete-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.9em;
+  }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:hover, .autocomplete-item.highlighted { background: #e3f2fd; }
+  .autocomplete-item small { color: #888; display: block; margin-top: 2px; }
+  .save-contact-hint {
+    font-size: 0.82em;
+    color: #888;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .save-contact-hint button {
+    font-size: 0.9em;
+    padding: 2px 8px;
+    width: auto;
+    background: #e8f5e9;
+    border: 1px solid #a5d6a7;
+    border-radius: 3px;
+    cursor: pointer;
+    color: #2e7d32;
+  }
+  .save-contact-hint button:hover { background: #c8e6c9; }
+
+  /* Kontakte-Tab */
+  .contact-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    margin-top: 20px;
+  }
+  .contact-card {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 14px;
+    background: #fafafa;
+    position: relative;
+  }
+  .contact-card strong { font-size: 1.05em; }
+  .contact-card .contact-detail { font-size: 0.88em; color: #555; margin-top: 4px; }
+  .contact-card-actions { margin-top: 10px; display: flex; gap: 6px; }
+  .contacts-add-btn { margin-bottom: 20px; padding: 10px 20px; background: #2196F3; color: #fff; border: none; border-radius: 4px; font-size: 1em; cursor: pointer; }
+  .contacts-add-btn:hover { background: #1976D2; }
+
+  /* Einstellungen-Tab */
+  .settings-section { margin-bottom: 28px; }
+  .settings-section h3 { margin-top: 0; margin-bottom: 12px; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+  .settings-section label { display: block; font-size: 0.85em; color: #555; margin-bottom: 3px; }
+  .settings-section input, .settings-section textarea { width: 100%; box-sizing: border-box; padding: 6px; margin-bottom: 8px; }
+  .image-upload-box {
+    border: 2px dashed #bbb; border-radius: 6px; padding: 16px; text-align: center;
+    cursor: pointer; background: #fafafa; color: #888; margin-bottom: 8px; transition: all 0.2s;
+  }
+  .image-upload-box:hover { border-color: #2196F3; color: #2196F3; background: #f0f7ff; }
+  .image-upload-box img { max-height: 80px; max-width: 100%; display: block; margin: 0 auto 6px; }
+  .image-upload-box.has-image { border-color: #4caf50; background: #f1fff1; }
+  .image-upload-box.drag-over { border-color: #2196F3; background: #e3f2fd; transform: scale(1.01); }
+  .settings-save-btn { padding: 10px 28px; background: #2196F3; color: #fff; border: none; border-radius: 4px; font-size: 1em; cursor: pointer; }
+  .settings-save-btn:hover { background: #1976D2; }
+
+  /* Bulk-Panel */
+  .bulk-panel { background: #f0f7ff; border: 1px solid #90caf9; border-radius: 6px; padding: 20px; }
+  .bulk-panel h3 { margin-top: 0; color: #1565c0; }
+  .bulk-panel label { display: block; font-size: 0.85em; color: #555; margin-bottom: 3px; }
+  .bulk-panel input, .bulk-panel select { width: 100%; box-sizing: border-box; padding: 6px; margin: 0; }
+  .contact-card label { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+  .contact-card input[type="checkbox"] { margin-top: 3px; width: auto; flex-shrink: 0; transform: scale(1.3); }
+
+  /* Drag & Drop Zone */
+  .drop-zone {
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    padding: 30px 20px;
+    text-align: center;
+    color: #999;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin: 15px 0;
+    background: #fafafa;
+  }
+  .drop-zone:hover { border-color: #2196F3; color: #2196F3; background: #f0f7ff; }
+  .drop-zone.drag-over { border-color: #4CAF50; background: #e8f5e9; color: #4CAF50; transform: scale(1.01); }
+  .drop-zone .drop-icon { font-size: 2em; display: block; margin-bottom: 8px; }
+  .drop-zone .drop-text { font-size: 1em; }
+  .drop-zone .drop-hint { font-size: 0.85em; margin-top: 6px; }
+  .drop-zone input[type="file"] { display: none; }
+
+  /* GitHub Setup Overlay */
+  #gh-setup-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:9000; display:none; align-items:center; justify-content:center; }
+  #gh-setup-box { background:#fff; border-radius:12px; padding:36px; max-width:480px; width:92%; box-shadow:0 8px 32px rgba(0,0,0,0.3); }
+  #gh-setup-box h2 { margin-top:0; }
+  #gh-setup-box p { color:#555; margin-top:0; }
+  #gh-setup-box label { display:block; font-weight:bold; margin:14px 0 4px; }
+  #gh-setup-box input { width:100%; padding:8px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; font-size:1em; }
+  #gh-setup-box small { display:block; color:#888; margin-top:5px; line-height:1.5; }
+  #gh-setup-box .gh-btn { width:100%; margin-top:20px; padding:12px; background:#2196F3; color:#fff; border:none; border-radius:6px; font-size:1em; cursor:pointer; }
+  #gh-setup-box .gh-btn:hover { background:#1976D2; }
+  /* App-Header */
+  .app-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .app-header h1 { margin:0; }
+  .header-controls { display:flex; align-items:center; gap:12px; }
+  #org-selector { padding:6px 10px; font-size:1em; border-radius:4px; border:1px solid #ccc; cursor:pointer; }
+  #sync-badge { font-size:1.3em; cursor:default; user-select:none; }
+</style>
+</head>
+
+<body>
+<!-- GitHub Setup Overlay -->
+<div id="gh-setup-overlay">
+  <div id="gh-setup-box">
+    <h2>🔗 GitHub-Verbindung einrichten</h2>
+    <p>Deine Daten werden sicher in einem privaten GitHub-Repository gespeichert. Diese Eingabe ist nur einmalig nötig.</p>
+    <label>GitHub-Benutzername</label>
+    <input id="gh_username" placeholder="z.B. maxmuster" autocomplete="off">
+    <label>Personal Access Token (PAT)</label>
+    <input id="gh_token" type="password" placeholder="ghp_...">
+    <small>📋 GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens<br>
+    Berechtigung: Repo «rechnungsverwaltung-daten» → Contents: Read &amp; Write</small>
+    <label>Daten-Repository (Name)</label>
+    <input id="gh_repo" placeholder="rechnungsverwaltung-daten">
+    <button class="gh-btn" onclick="saveGhConfigFromForm()">Verbinden ✓</button>
+  </div>
+</div>
+<div class="container">
+
+<div class="app-header">
+  <h1 id="app-title">Rechnungsverwaltung</h1>
+  <div class="header-controls">
+    <select id="org-selector" onchange="switchOrg(this.value)">
+      <option value="VSPW">VSPW</option>
+      <option value="SPAZ">SPAZ</option>
+      <option value="LJVW">LJVW</option>
+      <option value="JETZ">JETZ</option>
+    </select>
+    <span id="sync-badge" title="GitHub Sync">⏳</span>
+  </div>
+</div>
+
+<!-- Tab Navigation -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('invoices')">Rechnungen</button>
+  <button class="tab" onclick="switchTab('overview')">Übersicht</button>
+  <button class="tab" onclick="switchTab('contacts')">Kontakte</button>
+  <button class="tab" onclick="switchTab('settings')">Einstellungen</button>
+</div>
+
+<!-- Tab: Rechnungen -->
+<div id="tab-invoices" class="tab-content active">
+  <h2>Neue Rechnung erstellen</h2>
+  <form id="invoiceForm">
+    <div class="form-row">
+      <div class="autocomplete-wrapper">
+        <input id="i_customerName" required placeholder="Kundenname / Firma" autocomplete="off">
+        <div class="save-contact-hint">
+          <button type="button" onclick="saveCurrentContactFromForm('i')">💾 Als Kontakt speichern</button>
+          <span>oder Name tippen für Vorschläge</span>
+        </div>
+      </div>
+      <div>
+        <input id="i_customerEmail" required type="email" placeholder="E-Mail">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div>
+        <input id="i_customerStreet" required placeholder="Straße und Hausnummer">
+      </div>
+      <div>
+        <input id="i_customerCity" required placeholder="PLZ und Ort">
+      </div>
+    </div>
+    
+    <div class="form-row">
+      <div>
+        <label>Rechnungsdatum</label>
+        <input id="i_invoiceDate" required type="date">
+      </div>
+      <div>
+        <label>Fällig am</label>
+        <input id="i_dueDate" required type="date">
+      </div>
+    </div>
+    
+    <div class="form-full">
+      <label>Betreff/Projekt</label>
+      <input id="i_subject" placeholder="z.B. Beratungsleistung März 2026">
+    </div>
+    
+    <div class="positions-container">
+      <h4>Positionen</h4>
+      <div id="positions-list">
+        <div class="position-item">
+          <input type="text" placeholder="Beschreibung" class="pos-description" required>
+          <input type="number" step="0.01" placeholder="Menge" class="pos-quantity" value="1" required>
+          <input type="number" step="0.01" placeholder="Einzelpreis CHF" class="pos-price" required>
+          <input type="text" readonly class="pos-total" placeholder="Total">
+          <button type="button" onclick="removePosition(this)" disabled>✕</button>
+        </div>
+      </div>
+      <button type="button" class="add-position-btn" onclick="addPosition()">+ Position hinzufügen</button>
+      <div class="total-display">Gesamtbetrag: <span id="invoice-total">CHF 0.00</span></div>
+    </div>
+    
+    <div class="form-full">
+      <label>Zusätzliche Anmerkungen (optional)</label>
+      <textarea id="i_notes" rows="3" placeholder="z.B. Zahlungsbedingungen, Hinweise..."></textarea>
+    </div>
+    
+    <button type="submit">Rechnung erstellen</button>
+  </form>
+  
+  <div class="recent-invoices">
+    <h4>📋 Erstellte Rechnungen</h4>
+    <div id="invoicesList"></div>
+  </div>
+
+  <!-- Sammelrechnung -->
+  <div class="bulk-panel" style="margin-top:30px;">
+    <h3>Sammelrechnung</h3>
+    <p style="color:#555; margin-top:-8px; margin-bottom:14px;">Rechnungsparameter festlegen, Kontakte auswählen, dann erstellen. Für alle ausgewählten Kontakte wird dieselbe Rechnung ausgestellt.</p>
+
+    <div class="form-row">
+      <div>
+        <label>Rechnungsdatum</label>
+        <input id="bulk_invoiceDate" type="date">
+      </div>
+      <div>
+        <label>Fällig am</label>
+        <input id="bulk_dueDate" type="date">
+      </div>
+    </div>
+
+    <div class="form-full" style="margin-bottom:10px;">
+      <label>Betreff/Projekt</label>
+      <input id="bulk_subject" placeholder="z.B. Beratungsleistung März 2026">
+    </div>
+
+    <div class="positions-container">
+      <h4 style="margin-top:0">Positionen</h4>
+      <div id="bulk-positions-list">
+        <div class="position-item">
+          <input type="text" placeholder="Beschreibung" class="bulk-pos-description">
+          <input type="number" step="0.01" placeholder="Menge" class="bulk-pos-quantity" value="1">
+          <input type="number" step="0.01" placeholder="Einzelpreis CHF" class="bulk-pos-price">
+          <input type="text" readonly class="bulk-pos-total" placeholder="Total">
+          <button type="button" onclick="removeBulkPosition(this)" disabled>✕</button>
+        </div>
+      </div>
+      <button type="button" class="add-position-btn" onclick="addBulkPosition()">+ Position hinzufügen</button>
+      <div class="total-display">Gesamtbetrag: <span id="bulk-invoice-total">CHF 0.00</span></div>
+    </div>
+
+    <div class="form-full" style="margin-top:10px; margin-bottom:20px;">
+      <label>Zusätzliche Anmerkungen (optional)</label>
+      <textarea id="bulk_notes" rows="2" placeholder="z.B. Zahlungsbedingungen, Hinweise..."></textarea>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+      <strong>Kontakte auswählen:</strong>
+      <button class="small" onclick="selectAllContacts()">Alle auswählen</button>
+      <button class="small" onclick="deselectAllContacts()">Alle abwählen</button>
+    </div>
+    <div id="bulk-contacts-grid" class="contact-card-grid" style="margin-bottom:16px;"></div>
+
+    <button type="button" onclick="createBulkInvoices()" style="background:#388e3c; color:#fff; border:none; border-radius:4px; padding:10px 20px; font-size:1em; cursor:pointer;">
+      ✅ Rechnungen für <span id="bulk_count">0</span> ausgewählte Kontakte erstellen
+    </button>
+  </div>
+</div>
+
+<!-- Tab: Übersicht -->
+<div id="tab-overview" class="tab-content">
+  <h2>Alle Rechnungen</h2>
+  
+  <div class="tools">
+    <button onclick="exportData()">📤 Daten exportieren (JSON)</button>
+    <button onclick="exportCSV()">📊 CSV exportieren</button>
+  </div>
+
+  <div class="tools" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px;">
+    <button onclick="selectAllInvoiceRows()">Alle auswählen</button>
+    <button onclick="deselectAllInvoiceRows()">Alle abwählen</button>
+    <button id="bulkPdfBtn" onclick="downloadSelectedPDFs()" style="background:#1976D2; color:#fff; border:none; border-radius:4px; padding:6px 14px; cursor:pointer;">
+      📄 PDF herunterladen (<span id="selectedInvoiceCount">0</span>)
+    </button>
+  </div>
+  
+  <div class="drop-zone" id="dropZone" onclick="document.getElementById('importFile').click()">
+    <span class="drop-icon">📂</span>
+    <span class="drop-text">JSON-Datei hierher ziehen oder klicken zum Auswählen</span>
+    <span class="drop-hint">Unterstützt .json-Dateien aus dem Datenexport</span>
+    <input type="file" id="importFile" accept=".json" onchange="importData()">
+  </div>
+  
+  <div class="filter-bar">
+    <label>Filter:</label>
+    <select id="typeFilter" onchange="render()">
+      <option value="all">Alle Rechnungen</option>
+      <option value="membership">Nur Mitgliederbeiträge</option>
+      <option value="invoice">Nur normale Rechnungen</option>
+    </select>
+    <select id="statusFilter" onchange="render()">
+      <option value="all">Alle Status</option>
+      <option value="offen">Offen</option>
+      <option value="mahnung">Mahnungen</option>
+      <option value="bezahlt">Bezahlt</option>
+    </select>
+  </div>
+  
+  <div class="legend">
+    <strong>Status:</strong>
+    <span class="status-badge status-offen">Offen</span>
+    <span class="status-badge status-mahnung1">1. Mahnung</span>
+    <span class="status-badge status-mahnung2">2. Mahnung</span>
+    <span class="status-badge status-mahnung3">3. Mahnung</span>
+    <span class="status-badge status-bezahlt">Bezahlt</span>
+    <br><br>
+    <strong>Typ:</strong>
+    <span class="type-badge type-membership">Mitgliederbeitrag</span>
+    <span class="type-badge type-invoice">Rechnung</span>
+  </div>
+  
+  <table>
+    <thead>
+      <tr>
+        <th style="width:32px"></th>
+        <th>Typ</th>
+        <th>Empfänger</th>
+        <th>Rechnung</th>
+        <th>Betrag</th>
+        <th>Rechnung vom</th>
+        <th>Fällig am</th>
+        <th>Status</th>
+        <th>Aktionen</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<!-- Tab: Kontakte -->
+<div id="tab-contacts" class="tab-content">
+  <h2>Kontakte</h2>
+  <p style="color:#555; margin-bottom:16px;">Gespeicherte Kontakte werden beim Tippen des Namens als Vorschlag angezeigt und füllen alle Felder automatisch aus. Sie stehen auch bei der Sammelrechnung im Tab «Rechnungen» zur Auswahl.</p>
+  <button class="contacts-add-btn" onclick="openContactModal(null)">+ Neuen Kontakt</button>
+  <div id="contacts-grid" class="contact-card-grid"></div>
+</div>
+
+<!-- Tab: Einstellungen -->
+<div id="tab-settings" class="tab-content">
+  <h2>Einstellungen</h2>
+  <p style="color:#555; margin-bottom:24px;">Diese Angaben werden in jede PDF-Rechnung übernommen und zusammen mit den Rechnungen und Kontakten im JSON gespeichert.</p>
+
+  <div class="settings-section">
+    <h3>Absender</h3>
+    <div class="form-row">
+      <div>
+        <label>Organisation / Name</label>
+        <input id="s_name" placeholder="Vereinsname">
+      </div>
+      <div>
+        <label>E-Mail</label>
+        <input id="s_email" type="email" placeholder="info@beispiel.ch">
+      </div>
+    </div>
+    <div class="form-full">
+      <label>c/o (optional)</label>
+      <input id="s_co" placeholder="c/o …">
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Strasse und Hausnummer</label>
+        <input id="s_street" placeholder="Musterstrasse 1">
+      </div>
+      <div>
+        <label>PLZ und Ort</label>
+        <input id="s_city" placeholder="4000 Basel">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Website</label>
+        <input id="s_web" placeholder="www.beispiel.ch">
+      </div>
+      <div>
+        <label>IBAN</label>
+        <input id="s_iban" placeholder="CH00 0000 0000 0000 0000 0">
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <h3>Kopfzeile / Logo</h3>
+    <div class="image-upload-box" id="header-upload-box" onclick="document.getElementById('s_headerFile').click()">
+      <div id="header-preview-text">Klicken oder Bild hierher ziehen</div>
+      <img id="header-preview-img" style="display:none">
+      <input type="file" id="s_headerFile" accept="image/png,image/jpeg" style="display:none" onchange="loadSettingsImage('header', this)">
+    </div>
+    <button type="button" class="small" onclick="clearSettingsImage('header')">✕ Bild entfernen</button>
+    <p style="font-size:0.82em; color:#888; margin-top:6px;">
+      E<strong>Empfohlen: PNG</strong> oder JPEG, Format 1:3.3, z.B. 1089px auf 326px.</p>
+  </div>
+
+  <div class="settings-section">
+    <h3>QR-Einzahlungsschein</h3>
+    <div class="image-upload-box" id="qr-upload-box" onclick="document.getElementById('s_qrFile').click()">
+      <div id="qr-preview-text">Klicken oder Bild hierher ziehen</div>
+      <img id="qr-preview-img" style="display:none">
+      <input type="file" id="s_qrFile" accept="image/png,image/jpeg" style="display:none" onchange="loadSettingsImage('qr', this)">
+    </div>
+    <button type="button" class="small" onclick="clearSettingsImage('qr')">✕ Bild entfernen</button>
+    <p style="font-size:0.82em; color:#888; margin-top:6px;">
+      <strong>Empfohlen: PNG</strong> – der QR-Einzahlungsschein sollte exakt 210 × 106 mm gross sein (A4-Breite, unterer Abschnitt).
+    </p>
+  </div>
+
+  <div class="settings-section">
+    <h3>🔗 GitHub-Verbindung</h3>
+    <p style="font-size:0.9em;color:#555;margin:0 0 10px;">Token und Repository werden sicher im Browser gespeichert.</p>
+    <button type="button" class="settings-save-btn" style="background:#e53935;" onclick="resetGhConfig()">GitHub-Verbindung zurücksetzen</button>
+  </div>
+
+    <button type="button" class="settings-save-btn" onclick="saveSettingsForm()">💾 Einstellungen speichern</button>
+</div>
+
+<!-- Kontakt Modal -->
+<div id="contactModal" class="modal-overlay" onclick="if(event.target===this)closeContactModal()">
+  <div class="modal">
+    <h3 id="contactModalTitle">Kontakt anlegen</h3>
+    <form id="contactForm">
+      <input type="hidden" id="contact_id">
+      <div class="form-row">
+        <div>
+          <label>Name *</label>
+          <input id="contact_name" required placeholder="Vor- und Nachname / Firma">
+        </div>
+        <div>
+          <label>E-Mail *</label>
+          <input id="contact_email" required type="email" placeholder="E-Mail-Adresse">
+        </div>
+      </div>
+      <div class="form-row">
+        <div>
+          <label>Strasse und Hausnummer</label>
+          <input id="contact_street" placeholder="Strasse und Hausnummer">
+        </div>
+        <div>
+          <label>PLZ und Ort</label>
+          <input id="contact_city" placeholder="PLZ und Ort">
+        </div>
+      </div>
+      <div class="form-full">
+        <label>Notizen (optional)</label>
+        <textarea id="contact_notes" rows="2" placeholder="z.B. Mitgliedschaftstyp, Bemerkungen..."></textarea>
+      </div>
+      <div class="modal-buttons">
+        <button type="submit" class="btn-save">💾 Speichern</button>
+        <button type="button" class="btn-delete" id="contactDeleteBtn" onclick="deleteContact()" style="display:none">🗑️ Löschen</button>
+        <button type="button" class="btn-cancel" onclick="closeContactModal()">Abbrechen</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" class="modal-overlay" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal">
+    <h3 id="editModalTitle">Rechnung bearbeiten</h3>
+    <form id="editForm">
+      <input type="hidden" id="edit_index">
+      <input type="hidden" id="edit_type">
+      
+      <div class="form-row">
+        <div>
+          <label>Name</label>
+          <input id="edit_customerName" required placeholder="Name">
+        </div>
+        <div>
+          <label>E-Mail</label>
+          <input id="edit_memberEmail" required type="email" placeholder="E-Mail">
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div>
+          <label>Strasse und Hausnummer</label>
+          <input id="edit_memberStreet" required placeholder="Strasse und Hausnummer">
+        </div>
+        <div>
+          <label>PLZ und Ort</label>
+          <input id="edit_memberCity" required placeholder="PLZ und Ort">
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div>
+          <label>Rechnungsdatum</label>
+          <input id="edit_invoiceDate" required type="date">
+        </div>
+        <div>
+          <label>Fällig am</label>
+          <input id="edit_dueDate" required type="date">
+        </div>
+      </div>
+      
+      <!-- Mitgliederbeitrag-spezifische Felder -->
+      <div id="edit_membershipFields">
+        <div class="form-row">
+          <div>
+            <label>Mitgliedschaftstyp</label>
+            <select id="edit_memberType" required>
+              <option value="tier25">25 CHF</option>
+              <option value="tier60">60 CHF</option>
+              <option value="tier100">100 CHF</option>
+              <option value="tier200">200 CHF</option>
+              <option value="tier500">500 CHF</option>
+            </select>
+          </div>
+          <div>
+            <label>Jahr</label>
+            <input id="edit_year" type="number" min="2020" max="2030">
+          </div>
+        </div>
+      </div>
+      
+      <!-- Rechnungs-spezifische Felder -->
+      <div id="edit_invoiceFields">
+        <div class="form-row">
+          <div>
+            <label>Betreff/Projekt</label>
+            <input id="edit_subject" placeholder="z.B. Beratungsleistung März 2026">
+          </div>
+          <div>
+            <label>Rechnungsnummer</label>
+            <input id="edit_invoiceNumber" readonly style="background: #f0f0f0;">
+          </div>
+        </div>
+        
+        <div class="positions-container">
+          <h4>Positionen</h4>
+          <div id="edit-positions-list"></div>
+          <button type="button" class="add-position-btn" onclick="addEditPosition()">+ Position hinzufügen</button>
+          <div class="total-display">Gesamtbetrag: <span id="edit-invoice-total">CHF 0.00</span></div>
+        </div>
+        
+        <div class="form-full">
+          <label>Zusätzliche Anmerkungen (optional)</label>
+          <textarea id="edit_notes" rows="3" placeholder="z.B. Zahlungsbedingungen, Hinweise..."></textarea>
+        </div>
+      </div>
+      
+      <div class="modal-buttons">
+        <button type="submit" class="btn-save">💾 Speichern</button>
+        <button type="button" class="btn-delete" onclick="deleteInvoice()">🗑️ Löschen</button>
+        <button type="button" class="btn-cancel" onclick="closeEditModal()">Abbrechen</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+</div>
+
+<script>
+const { jsPDF } = window.jspdf;
+let ORG = 'VSPW'; // wird dynamisch gesetzt
+const storageKey  = () => 'rv_invoices_'  + ORG;
+const settingsKey = () => 'rv_settings_'  + ORG;
+const contactsKey = () => 'rv_contacts_'  + ORG;
+
+// Konfiguration
+
+const MEMBER_TYPES = {
+  tier25: { label: "25 CHF", amount: 25 },
+  tier60: { label: "60 CHF", amount: 60 },
+  tier100: { label: "100 CHF", amount: 100 },
+  tier200: { label: "200 CHF", amount: 200 },
+  tier500: { label: "500 CHF", amount: 500 }
+};
+
+const REMINDER_DAYS = {
+  first: 14,
+  second: 14,
+  third: 14
+};
+
+// Tab-Wechsel
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+  event.target.classList.add('active');
+  document.getElementById(`tab-${tabName}`).classList.add('active');
+
+  if (tabName === 'contacts') renderContactsGrid();
+  if (tabName === 'settings') renderSettingsForm();
+  if (tabName === 'invoices') renderBulkContactsGrid();
+}
+
+// Hilfsfunktionen
+function loadInvoices() {
+  try {
+    const data = localStorage.getItem(storageKey());
+    if (data) {
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.error("Fehler beim Laden der Daten:", e);
+    // Backup der korrupten Daten erstellen
+    const corruptData = localStorage.getItem(storageKey());
+    if (corruptData) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      localStorage.setItem(storageKey() + "_backup_" + timestamp, corruptData);
+      console.log("Korrupte Daten wurden als Backup gespeichert:", storageKey() + "_backup_" + timestamp);
+    }
+    // localStorage zurücksetzen
+    localStorage.removeItem(storageKey());
+    alert("⚠️ Die gespeicherten Daten waren beschädigt und wurden zurückgesetzt.\n\nEin Backup wurde erstellt. Bitte importiere deine letzte JSON-Sicherung.");
+    return [];
+  }
+  
+  // Migration von alten Daten
+  const oldData = localStorage.getItem("mitgliederbeitraege");
+  if (oldData) {
+    try {
+      const old = JSON.parse(oldData);
+      const migrated = old.map(item => ({ ...item, type: 'membership' }));
+      saveInvoices(migrated);
+      return migrated;
+    } catch (e) {
+      console.error("Fehler bei der Migration:", e);
+    }
+  }
+  return [];
+}
+
+// Automatische Rechnungsnummer generieren
+function generateInvoiceNumber(type, year, existingInvoices) {
+  const invoices = existingInvoices || loadInvoices();
+  const prefix = type === 'membership' ? 'MB' : 'RE';
+  
+  // Finde alle Rechnungen des gleichen Typs und Jahres
+  const sameTypeYear = invoices.filter(inv => 
+    inv.type === type && 
+    (type === 'membership' ? inv.year === year : inv.invoiceYear === year)
+  );
+  
+  // Ermittle die höchste Nummer
+  let maxNumber = 0;
+  sameTypeYear.forEach(inv => {
+    if (inv.invoiceNumber) {
+      const match = inv.invoiceNumber.match(/\d+$/);
+      if (match) {
+        const num = parseInt(match[0]);
+        if (num > maxNumber) maxNumber = num;
+      }
+    }
+  });
+  
+  const nextNumber = (maxNumber + 1).toString().padStart(3, '0');
+  return `${prefix}-${year}-${nextNumber}`;
+}
+
+function saveInvoices(invoices) {
+  localStorage.setItem(storageKey(), JSON.stringify(invoices));
+  scheduleSyncToGitHub();
+}
+
+function addDays(dateStr, days) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('de-CH');
+}
+
+function formatCurrency(amount) {
+  return `CHF ${amount.toFixed(2)}`;
+}
+
+function calculateStatus(invoice) {
+  if (invoice.paid) return "bezahlt";
+  
+  const today = new Date().toISOString().split("T")[0];
+  
+  if (invoice.reminder3Date && today > invoice.reminder3Date) {
+    return "mahnung3";
+  }
+  if (invoice.reminder2Date && today > invoice.reminder2Date) {
+    return "mahnung2";
+  }
+  if (invoice.reminder1Date && today > invoice.reminder1Date) {
+    return "mahnung1";
+  }
+  if (today > invoice.dueDate) {
+    return "mahnung1";
+  }
+  
+  return "offen";
+}
+
+// Positionsverwaltung
+function addPosition() {
+  const container = document.getElementById('positions-list');
+  const newPosition = document.createElement('div');
+  newPosition.className = 'position-item';
+  newPosition.innerHTML = `
+    <input type="text" placeholder="Beschreibung" class="pos-description" required>
+    <input type="number" step="0.01" placeholder="Menge" class="pos-quantity" value="1" required>
+    <input type="number" step="0.01" placeholder="Einzelpreis CHF" class="pos-price" required>
+    <input type="text" readonly class="pos-total" placeholder="Total">
+    <button type="button" onclick="removePosition(this)">✕</button>
+  `;
+  container.appendChild(newPosition);
+  updatePositionListeners();
+}
+
+function removePosition(button) {
+  button.closest('.position-item').remove();
+  calculateInvoiceTotal();
+}
+
+function updatePositionListeners() {
+  document.querySelectorAll('.pos-quantity, .pos-price').forEach(input => {
+    input.removeEventListener('input', calculateInvoiceTotal);
+    input.addEventListener('input', calculateInvoiceTotal);
+  });
+}
+
+function calculateInvoiceTotal() {
+  let total = 0;
+  document.querySelectorAll('#positions-list .position-item').forEach(item => {
+    const quantity = parseFloat(item.querySelector('.pos-quantity').value) || 0;
+    const price = parseFloat(item.querySelector('.pos-price').value) || 0;
+    const lineTotal = quantity * price;
+    item.querySelector('.pos-total').value = formatCurrency(lineTotal);
+    total += lineTotal;
+  });
+  document.getElementById('invoice-total').textContent = formatCurrency(total);
+}
+
+// Tabelle rendern
+function render() {
+  const tableBody = document.getElementById("tableBody");
+  tableBody.innerHTML = "";
+  
+  const invoices = loadInvoices();
+  const typeFilter = document.getElementById("typeFilter")?.value || 'all';
+  const statusFilter = document.getElementById("statusFilter")?.value || 'all';
+  
+  // Filtern
+  let filtered = invoices;
+  if (typeFilter !== 'all') {
+    filtered = filtered.filter(inv => inv.type === typeFilter);
+  }
+  if (statusFilter !== 'all') {
+    filtered = filtered.filter(inv => {
+      const status = calculateStatus(inv);
+      if (statusFilter === 'offen') return status === 'offen';
+      if (statusFilter === 'mahnung') return status.startsWith('mahnung');
+      if (statusFilter === 'bezahlt') return status === 'bezahlt';
+      return true;
+    });
+  }
+  
+  // Sortieren
+  filtered.sort((a, b) => {
+    if (a.paid !== b.paid) return a.paid ? 1 : -1;
+    return a.dueDate < b.dueDate ? -1 : 1;
+  });
+  
+  filtered.forEach((invoice) => {
+    const originalInvoices = loadInvoices();
+    const originalIndex = originalInvoices.findIndex(i => 
+      i.customerName === invoice.customerName && 
+      i.invoiceDate === invoice.invoiceDate &&
+      (i.invoiceNumber === invoice.invoiceNumber || i.year === invoice.year)
+    );
+    
+    const status = calculateStatus(invoice);
+    
+    const tr = document.createElement("tr");
+    tr.className = status === "bezahlt" ? "paid" : 
+                   status === "mahnung1" ? "reminder1" : 
+                   status === "mahnung2" ? "reminder2" : 
+                   status === "mahnung3" ? "reminder3" : "";
+    
+    let statusLabel = status === "offen" ? "Offen" :
+                      status === "mahnung1" ? "1. Mahnung fällig" :
+                      status === "mahnung2" ? "2. Mahnung fällig" :
+                      status === "mahnung3" ? "3. Mahnung fällig" :
+                      "Bezahlt";
+    
+    let description = "";
+    let typeLabel = "";
+    
+    if (invoice.type === 'membership') {
+      const typeInfo = MEMBER_TYPES[invoice.memberType];
+      description = `${invoice.invoiceNumber || 'MB-' + invoice.year + '-???'}<br><small>${typeInfo.label}</small>`;
+      typeLabel = '<span class="type-badge type-membership">Mitgliederbeitrag</span>';
+    } else {
+      description = `${invoice.invoiceNumber || 'RE-???'}<br><small>${invoice.subject || '-'}</small>`;
+      typeLabel = '<span class="type-badge type-invoice">Rechnung</span>';
+    }
+    
+    let actions = "";
+    if (!invoice.paid) {
+      actions = `
+        <button class="small" onclick="generatePDF(${originalIndex})">📄 PDF</button>
+        <button class="small" onclick="sendReminder(${originalIndex})">✉️ Mahnung</button>
+        <button class="small" onclick="markPaid(${originalIndex})">✓ Bezahlt</button>
+        <button class="small" onclick="openEditModal(${originalIndex})">✏️ Bearbeiten</button>
+      `;
+    } else {
+      actions = `
+        <button class="small" onclick="markUnpaid(${originalIndex})">↺ Rückgängig</button>
+        <button class="small" onclick="openEditModal(${originalIndex})">✏️ Bearbeiten</button>
+      `;
+    }
+    
+    tr.innerHTML = `
+      <td><input type="checkbox" class="invoice-checkbox" value="${originalIndex}" onchange="updateSelectedInvoiceCount()" style="transform:scale(1.3)"></td>
+      <td>${typeLabel}</td>
+      <td>${invoice.customerName}</td>
+      <td>${description}</td>
+      <td>${formatCurrency(invoice.amount)}</td>
+      <td>${formatDate(invoice.invoiceDate)}</td>
+      <td>${formatDate(invoice.dueDate)}</td>
+      <td><span class="status-badge status-${status.replace('mahnung', 'mahnung')}">${statusLabel}</span></td>
+      <td>${actions}</td>
+    `;
+    
+    tableBody.appendChild(tr);
+  });
+  
+  // Rendere auch die kompakten Übersichten
+  renderMembershipList();
+  renderInvoicesList();
+}
+
+// Kompakte Übersicht für Mitgliederbeiträge
+function renderMembershipList() {
+  const container = document.getElementById("membershipList");
+  if (!container) return;
+  
+  const invoices = loadInvoices().filter(inv => inv.type === 'membership');
+  
+  if (invoices.length === 0) {
+    container.innerHTML = '<div class="empty-state">Noch keine Mitgliederbeiträge erstellt</div>';
+    return;
+  }
+  
+  // Sortiere nach Datum, neueste zuerst
+  invoices.sort((a, b) => {
+    return new Date(b.invoiceDate) - new Date(a.invoiceDate);
+  });
+  
+  let html = '<table><thead><tr><th>Rechnung</th><th>Mitglied</th><th>Betrag</th><th>Jahr</th><th>Datum</th><th>Status</th></tr></thead><tbody>';
+  
+  invoices.forEach((invoice) => {
+    const status = calculateStatus(invoice);
+    const typeInfo = MEMBER_TYPES[invoice.memberType];
+    const statusClass = status === "bezahlt" ? "paid" : 
+                       status.startsWith("mahnung") ? "reminder1" : "";
+    
+    let statusLabel = status === "offen" ? "Offen" :
+                      status === "mahnung1" ? "1. Mahnung" :
+                      status === "mahnung2" ? "2. Mahnung" :
+                      status === "mahnung3" ? "3. Mahnung" :
+                      "Bezahlt";
+    
+    html += `
+      <tr class="${statusClass}">
+        <td><strong>${invoice.invoiceNumber || 'MB-???'}</strong></td>
+        <td>${invoice.memberName}</td>
+        <td>${formatCurrency(invoice.amount)}</td>
+        <td>${invoice.year}</td>
+        <td>${formatDate(invoice.invoiceDate)}</td>
+        <td><span class="status-badge status-${status}">${statusLabel}</span></td>
+      </tr>
+    `;
+  });
+  
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// Kompakte Übersicht für normale Rechnungen
+function renderInvoicesList() {
+  const container = document.getElementById("invoicesList");
+  if (!container) return;
+  
+  const invoices = loadInvoices().filter(inv => inv.type === 'invoice');
+  
+  if (invoices.length === 0) {
+    container.innerHTML = '<div class="empty-state">Noch keine Rechnungen erstellt</div>';
+    return;
+  }
+  
+  // Sortiere nach Datum, neueste zuerst
+  invoices.sort((a, b) => {
+    return new Date(b.invoiceDate) - new Date(a.invoiceDate);
+  });
+  
+  let html = '<table><thead><tr><th>Rechnung</th><th>Kunde</th><th>Betreff</th><th>Betrag</th><th>Datum</th><th>Status</th></tr></thead><tbody>';
+  
+  invoices.forEach((invoice) => {
+    const status = calculateStatus(invoice);
+    const statusClass = status === "bezahlt" ? "paid" : 
+                       status.startsWith("mahnung") ? "reminder1" : "";
+    
+    let statusLabel = status === "offen" ? "Offen" :
+                      status === "mahnung1" ? "1. Mahnung" :
+                      status === "mahnung2" ? "2. Mahnung" :
+                      status === "mahnung3" ? "3. Mahnung" :
+                      "Bezahlt";
+    
+    html += `
+      <tr class="${statusClass}">
+        <td><strong>${invoice.invoiceNumber || 'RE-???'}</strong></td>
+        <td>${invoice.customerName}</td>
+        <td>${invoice.subject || '-'}</td>
+        <td>${formatCurrency(invoice.amount)}</td>
+        <td>${formatDate(invoice.invoiceDate)}</td>
+        <td><span class="status-badge status-${status}">${statusLabel}</span></td>
+      </tr>
+    `;
+  });
+  
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// Formular: Mitgliederbeitrag
+// Formular: Normale Rechnung
+document.getElementById("invoiceForm").addEventListener("submit", e => {
+  e.preventDefault();
+  
+  const customerName = document.getElementById("i_customerName").value;
+  const customerEmail = document.getElementById("i_customerEmail").value;
+  const customerStreet = document.getElementById("i_customerStreet").value;
+  const customerCity = document.getElementById("i_customerCity").value;
+  const invoiceDate = document.getElementById("i_invoiceDate").value;
+  const invoiceYear = new Date(invoiceDate).getFullYear();
+  const dueDate = document.getElementById("i_dueDate").value;
+  const subject = document.getElementById("i_subject").value;
+  const notes = document.getElementById("i_notes").value;
+  
+  // Positionen sammeln
+  const positions = [];
+  let totalAmount = 0;
+  
+  document.querySelectorAll('#positions-list .position-item').forEach(item => {
+    const description = item.querySelector('.pos-description').value;
+    const quantity = parseFloat(item.querySelector('.pos-quantity').value);
+    const price = parseFloat(item.querySelector('.pos-price').value);
+    const total = quantity * price;
+
+    positions.push({ description, quantity, price, total });
+    totalAmount += total;
+  });
+  
+  if (positions.length === 0) {
+    alert("Bitte mindestens eine Position hinzufügen!");
+    return;
+  }
+  
+  const invoiceNumber = generateInvoiceNumber('invoice', invoiceYear);
+  
+  const invoices = loadInvoices();
+  invoices.push({
+    type: 'invoice',
+    customerName: customerName,
+    memberEmail: customerEmail,
+    memberStreet: customerStreet,
+    memberCity: customerCity,
+    invoiceNumber: invoiceNumber,
+    invoiceYear: invoiceYear,
+    invoiceDate: invoiceDate,
+    dueDate: dueDate,
+    subject: subject,
+    notes: notes,
+    positions: positions,
+    amount: totalAmount,
+    paid: false,
+    paidDate: null,
+    reminder1Date: null,
+    reminder2Date: null,
+    reminder3Date: null
+  });
+  
+  saveInvoices(invoices);
+  document.getElementById("invoiceForm").reset();
+  
+  // Positionen zurücksetzen
+  document.getElementById('positions-list').innerHTML = `
+    <div class="position-item">
+      <input type="text" placeholder="Beschreibung" class="pos-description" required>
+      <input type="number" step="0.01" placeholder="Menge" class="pos-quantity" value="1" required>
+      <input type="number" step="0.01" placeholder="Einzelpreis CHF" class="pos-price" required>
+      <input type="text" readonly class="pos-total" placeholder="Total">
+      <button type="button" onclick="removePosition(this)" disabled>✕</button>
+    </div>
+  `;
+  updatePositionListeners();
+  calculateInvoiceTotal();
+  
+  // Datum wieder setzen
+  document.getElementById("i_invoiceDate").valueAsDate = new Date();
+  document.getElementById("i_dueDate").value = addDays(new Date().toISOString().split("T")[0], 30);
+  
+  autoSaveContactFromInvoice(customerName, customerEmail, customerStreet, customerCity);
+
+  alert(`Rechnung ${invoiceNumber} für ${customerName} erstellt!`);
+  switchTab('overview');
+  render();
+});
+
+// Bezahlt markieren
+function markPaid(index) {
+  const invoices = loadInvoices();
+  const today = new Date().toISOString().split("T")[0];
+  invoices[index].paid = true;
+  invoices[index].paidDate = today;
+  saveInvoices(invoices);
+  render();
+}
+
+function markUnpaid(index) {
+  const invoices = loadInvoices();
+  invoices[index].paid = false;
+  invoices[index].paidDate = null;
+  saveInvoices(invoices);
+  render();
+}
+
+// PDF generieren
+function generatePDF(index, outputMode = 'save') {
+  const invoices = loadInvoices();
+  const invoice = invoices[index];
+  
+  const doc = new jsPDF({ compress: true });
+  
+  function createPDF(imgData, qrImgData) {
+    let startY = 15; // Fester Start
+    
+    // ========== LOGO RECHTSBÜNDIG ==========
+    if (imgData) {
+      try {
+        const imgWidth = 60;
+        const imgProps = doc.getImageProperties(imgData);
+        const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+        const logoX = 210 - imgWidth - 20;
+        doc.addImage(imgData, imgFormat(imgData), logoX, startY, imgWidth, imgHeight);
+      } catch (e) {
+        console.error("Fehler beim Einfügen des Bildes:", e);
+      }
+    }
+    
+    // ========== ABSENDER RECHTSBÜNDIG ==========
+    const s = loadSettings();
+    doc.setFontSize(8);
+    const senderX = 210 - 20;
+    let senderY = startY + 25;
+    [s.senderName, s.senderCo, s.senderStreet, s.senderCity, s.senderEmail, s.senderWeb]
+      .filter(Boolean)
+      .forEach(line => { doc.text(line, senderX, senderY, { align: 'right' }); senderY += 4; });
+
+    // ========== EMPFÄNGER LINKSBÜNDIG (+10mm) ==========
+    doc.setFontSize(11);
+    doc.text(invoice.customerName, 20, startY + 55); // war 45, jetzt +10 = 55
+    doc.text(invoice.memberStreet, 20, startY + 60); // war 50, jetzt +10 = 60
+    doc.text(invoice.memberCity, 20, startY + 65); // war 55, jetzt +10 = 65
+    
+    // ========== TITEL (+10mm) ==========
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    
+    let title, invNumber;
+    if (invoice.type === 'membership') {
+      title = `Mitgliederbeitrag ${invoice.year}`;
+      invNumber = invoice.invoiceNumber || `MB-${invoice.year}-???`;
+    } else {
+      title = invoice.subject || "Rechnung";
+      invNumber = invoice.invoiceNumber || `RE-???`;
+    }
+    
+    doc.text(title, 20, startY + 80); // war 70, jetzt +10 = 80
+    doc.setFont(undefined, 'normal');
+    
+    // ========== RECHNUNGSDETAILS (+10mm) ==========
+    doc.setFontSize(10);
+    doc.text(`Rechnungsnummer: ${invNumber}`, 20, startY + 88); // war 78, jetzt +10 = 88
+    doc.text(`Rechnungsdatum: ${formatDate(invoice.invoiceDate)}`, 20, startY + 93); // war 83, jetzt +10 = 93
+    doc.text(`Fällig am: ${formatDate(invoice.dueDate)}`, 20, startY + 98); // war 88, jetzt +10 = 98
+    
+    // ========== TABELLE (+10mm) ==========
+    doc.setFontSize(10);
+    doc.text("Position", 20, startY + 108); // war 98, jetzt +10 = 108
+    doc.text("Menge", 110, startY + 108);
+    doc.text("Preis", 135, startY + 108);
+    doc.text("Betrag", 160, startY + 108);
+    doc.line(20, startY + 110, 190, startY + 110); // war 100, jetzt +10 = 110
+    
+    let yPos = startY + 117; // war 107, jetzt +10 = 117
+    
+    // ========== POSITIONEN ==========
+    if (invoice.type === 'membership') {
+      const typeInfo = MEMBER_TYPES[invoice.memberType];
+      doc.setFontSize(10);
+      doc.text(`Mitgliederbeitrag ${invoice.year} (${typeInfo.label})`, 20, yPos);
+      doc.text("1", 110, yPos);
+      doc.text(formatCurrency(invoice.amount), 135, yPos);
+      doc.text(formatCurrency(invoice.amount), 160, yPos);
+      yPos += 8;
+    } else {
+      doc.setFontSize(10);
+      invoice.positions.forEach(pos => {
+        const desc = doc.splitTextToSize(pos.description, 85);
+        doc.text(desc, 20, yPos);
+        doc.text(pos.quantity.toString(), 110, yPos);
+        doc.text(formatCurrency(pos.price), 135, yPos);
+        doc.text(formatCurrency(pos.total), 160, yPos);
+        yPos += Math.max(5, desc.length * 4);
+      });
+    }
+    
+    // ========== SUMME ==========
+    doc.line(20, yPos, 190, yPos);
+    yPos += 8;
+    doc.setFont(undefined, 'bold');
+    doc.text("Total", 20, yPos);
+    doc.text(formatCurrency(invoice.amount), 160, yPos);
+    doc.setFont(undefined, 'normal');
+    
+    yPos += 15;
+    
+    // ========== ZAHLUNGSINFORMATIONEN (nur ohne QR-Code) ==========
+    if (!qrImgData) {
+      doc.setFontSize(10);
+      doc.text("Zahlungsinformationen", 20, yPos);
+      doc.text(`IBAN: ${s.iban || ''}`, 20, yPos + 5);
+      doc.text(`Kontoinhaber: ${s.senderName || ''}`, 20, yPos + 10);
+      
+      let verwendungszweck;
+      if (invoice.type === 'membership') {
+        verwendungszweck = `Mitgliederbeitrag ${invoice.year} - ${invoice.customerName}`;
+      } else {
+        verwendungszweck = `${invoice.invoiceNumber}`;
+      }
+      doc.text(`Verwendungszweck: ${verwendungszweck}`, 20, yPos + 15);
+      yPos += 25;
+      
+      // Anmerkungen
+      if (invoice.notes) {
+        doc.setFontSize(9);
+        doc.text("Anmerkungen:", 20, yPos);
+        const notesLines = doc.splitTextToSize(invoice.notes, 170);
+        doc.text(notesLines, 20, yPos + 5);
+        yPos += notesLines.length * 4 + 10;
+      }
+      
+      // Dankesnachricht (nur bei MB)
+      if (invoice.type === 'membership') {
+        doc.setFontSize(11);
+        doc.text("Vielen Dank für die Unterstützung!", 20, yPos);
+      }
+    } else {
+      // ========== MIT QR-CODE: Anmerkungen + Dankesnachricht HÖHER ==========
+      const maxYPos = 200; // ANGEPASST: Erhöht von 175 auf 185mm
+      
+      // Anmerkungen (kompakt)
+      if (invoice.notes && yPos < maxYPos) { // VEREINFACHT: Nur prüfen ob unter maxYPos
+        doc.setFontSize(9);
+        doc.text("Anmerkungen:", 20, yPos);
+        const notesLines = doc.splitTextToSize(invoice.notes, 170);
+        // Berechne wie viele Zeilen noch Platz haben
+        const availableSpace = maxYPos - yPos - 10;
+        const maxLines = Math.max(1, Math.min(notesLines.length, Math.floor(availableSpace / 4)));
+        doc.text(notesLines.slice(0, maxLines), 20, yPos + 4);
+        yPos += maxLines * 4 + 8;
+      }
+      
+      // Dankesnachricht (nur bei MB, und nur wenn Platz ist)
+      if (invoice.type === 'membership' && yPos < maxYPos) { // VEREINFACHT
+        doc.setFontSize(11);
+        doc.text("Vielen Dank für die Unterstützung!", 20, yPos);
+      }
+    }
+    
+    // ========== QR-EINZAHLUNGSSCHEIN ==========
+    if (qrImgData) {
+      try {
+        const qrWidth = 210;
+        const qrHeight = 106;
+        const qrX = 0;
+        const qrY = 297 - qrHeight;
+        
+        doc.addImage(qrImgData, imgFormat(qrImgData), qrX, qrY, qrWidth, qrHeight);
+        console.log("QR-Einzahlungsschein erfolgreich eingefügt");
+      } catch (e) {
+        console.error("Fehler beim Einfügen des QR-Einzahlungsscheins:", e);
+      }
+    }
+    
+    let filename;
+    if (invoice.type === 'membership') {
+      filename = `Mitgliederbeitrag_${invoice.customerName}_${invoice.year}.pdf`;
+    } else {
+      filename = `Rechnung_${invoice.invoiceNumber}_${invoice.customerName}.pdf`;
+    }
+    if (outputMode === 'blob') {
+      return { blob: doc.output('blob'), filename };
+    }
+    doc.save(filename);
+    return null;
+  }
+  
+  try {
+    const _s = loadSettings();
+    return createPDF(_s.headerImage || null, _s.qrImage || null);
+  } catch (e) {
+    console.error("Fehler bei der PDF-Erstellung:", e);
+    return createPDF(null, null);
+  }
+}
+// Mahnung senden
+function sendReminder(index) {
+  const invoices = loadInvoices();
+  const invoice = invoices[index];
+  const today = new Date().toISOString().split("T")[0];
+  
+  let reminderLevel = 1;
+  let newDueDate;
+  
+  if (!invoice.reminder1Date) {
+    invoice.reminder1Date = today;
+    newDueDate = addDays(today, REMINDER_DAYS.first);
+    reminderLevel = 1;
+  } else if (!invoice.reminder2Date) {
+    invoice.reminder2Date = today;
+    newDueDate = addDays(today, REMINDER_DAYS.second);
+    reminderLevel = 2;
+  } else if (!invoice.reminder3Date) {
+    invoice.reminder3Date = today;
+    newDueDate = addDays(today, REMINDER_DAYS.third);
+    reminderLevel = 3;
+  } else {
+    alert("Bereits 3 Mahnungen versendet. Bitte persönlich kontaktieren.");
+    return;
+  }
+  
+  saveInvoices(invoices);
+  render();
+  
+  const firstName = invoice.customerName.split(" ")[0];
+  let subject, bodyText, invDescription;
+  
+  if (invoice.type === 'membership') {
+    subject = encodeURIComponent(`${reminderLevel}. Mahnung: Mitgliedsbeitrag ${invoice.year}`);
+    invDescription = `Mitgliederbeitrag ${invoice.year}`;
+  } else {
+    subject = encodeURIComponent(`${reminderLevel}. Mahnung: Rechnung ${invoice.invoiceNumber}`);
+    invDescription = `Rechnung ${invoice.invoiceNumber}`;
+  }
+  
+  bodyText = `Hallo ${firstName}\n\n`;
+  
+  if (reminderLevel === 1) {
+    bodyText += 
+      `dies ist eine freundliche Erinnerung an die Zahlung für: ${invDescription}.\n\n` +
+      `Rechnungsbetrag: ${formatCurrency(invoice.amount)}\n` +
+      `Ursprüngliches Fälligkeitsdatum: ${formatDate(invoice.dueDate)}\n` +
+      `Neues Zahlungsziel: ${formatDate(newDueDate)}\n\n` +
+      `Bitte überweise den Betrag bis zum neuen Zahlungsziel.\n\n`;
+  } else if (reminderLevel === 2) {
+    bodyText += 
+      `leider haben wir bisher keine Zahlung für: ${invDescription} erhalten.\n\n` +
+      `Rechnungsbetrag: ${formatCurrency(invoice.amount)}\n` +
+      `Neues Zahlungsziel: ${formatDate(newDueDate)}\n\n` +
+      `Bitte überweise den Betrag umgehend.\n\n`;
+  } else {
+    bodyText += 
+      `trotz mehrfacher Erinnerung haben wir noch keine Zahlung für: ${invDescription} erhalten.\n\n` +
+      `Rechnungsbetrag: ${formatCurrency(invoice.amount)}\n` +
+      `Letztes Zahlungsziel: ${formatDate(newDueDate)}\n\n` +
+      `Bitte überweise den Betrag sofort oder kontaktiere uns, falls es Probleme gibt.\n\n`;
+  }
+  
+  bodyText += 
+    `Zahlungsinformationen:\n` +
+    `IBAN: ${loadSettings().iban || ''}\n` +
+    `Kontoinhaber: ${loadSettings().senderName || ''}\n` +
+    `Verwendungszweck: ${invDescription} - ${invoice.customerName}\n\n` +
+    `Vielen Dank für die Unterstützung!\n` +
+    `${loadSettings().senderName || ''}`;
+  
+  const body = encodeURIComponent(bodyText);
+  window.location.href = `mailto:${invoice.memberEmail}?subject=${subject}&body=${body}`;
+}
+
+// Export
+function exportData() {
+  const payload = {
+    version: 2,
+    invoices: loadInvoices(),
+    contacts: loadContacts(),
+    settings: loadSettings()
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = ORG + " Rechnungsverwaltung.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function exportCSV() {
+  const invoices = loadInvoices();
+  let csv = "Typ,Name,Straße,PLZ/Ort,E-Mail,Beschreibung,Betrag,Rechnung vom,Fällig am,Status,Bezahlt am\n";
+  
+  invoices.forEach(inv => {
+    const status = calculateStatus(inv);
+    const typeLabel = inv.type === 'membership' ? 'Mitgliederbeitrag' : 'Rechnung';
+    let description;
+    if (inv.type === 'membership') {
+      const typeInfo = MEMBER_TYPES[inv.memberType];
+      description = `Mitgliederbeitrag ${inv.year} (${typeInfo.label})`;
+    } else {
+      description = inv.subject || inv.invoiceNumber;
+    }
+    
+    csv += `"${typeLabel}","${inv.customerName}","${inv.memberStreet || ''}","${inv.memberCity || ''}","${inv.memberEmail}","${description}",${inv.amount},"${formatDate(inv.invoiceDate)}","${formatDate(inv.dueDate)}","${status}","${inv.paidDate ? formatDate(inv.paidDate) : '-'}"\n`;
+  });
+  
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "rechnungsverwaltung.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// Import
+function clearAllAppStorage(includeSettings = false) {
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key === 'rv_gh_config' || key === 'rv_last_org') continue;
+    if (key.startsWith('rv_invoices_') || key.startsWith('rv_contacts_') || key === 'mitgliederbeitraege') {
+      toRemove.push(key);
+    }
+    if (includeSettings && key.startsWith('rv_settings_')) toRemove.push(key);
+  }
+  toRemove.forEach(k => localStorage.removeItem(k));
+}
+
+function importData() {
+  const file = document.getElementById("importFile").files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+
+      // Neues Format: { version, invoices, contacts }
+      // Altes Format: Array (nur Rechnungen)
+      let invoices, contacts;
+      if (Array.isArray(parsed)) {
+        invoices = parsed;
+        contacts = [];
+      } else if (parsed && Array.isArray(parsed.invoices)) {
+        invoices = parsed.invoices;
+        contacts = Array.isArray(parsed.contacts) ? parsed.contacts : [];
+      } else {
+        throw new Error("Ungültiges Format");
+      }
+
+      const requiredFields = ['customerName', 'amount', 'invoiceDate', 'type'];
+      const invalid = invoices.filter(inv => !requiredFields.every(f => inv.hasOwnProperty(f)));
+
+      if (invalid.length > 0) {
+        if (!window.confirm(`⚠️ ${invalid.length} von ${invoices.length} Einträgen haben fehlende Felder. Trotzdem fortfahren?`)) return;
+        invoices = invoices.filter(inv => requiredFields.every(f => inv.hasOwnProperty(f)));
+      }
+
+      // Rechnungen + Kontakte löschen und neu befüllen
+      // Settings nur überschreiben wenn die JSON einen settings-Block enthält
+      clearAllAppStorage(!!parsed.settings);
+      saveInvoices(invoices);
+      saveContacts(contacts);
+      if (parsed.settings) saveSettings(parsed.settings);
+
+      render();
+      renderContactsGrid();
+      renderBulkContactsGrid();
+      renderSettingsForm();
+
+      let msg = `✅ ${invoices.length} Rechnungen importiert.\n✅ ${contacts.length} Kontakte importiert.`;
+      if (invalid.length > 0) msg += `\n⚠️ ${invalid.length} ungültige Einträge übersprungen.`;
+      alert(msg);
+
+    } catch (err) {
+      alert(`❌ Fehler beim Import: ${err.message}\n\nBitte überprüfe die Datei.`);
+      console.error("Import-Fehler:", err);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ========== DRAG & DROP IMPORT ==========
+
+const dropZone = document.getElementById('dropZone');
+
+dropZone.addEventListener('dragenter', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  this.classList.add('drag-over');
+});
+
+dropZone.addEventListener('dragover', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  this.classList.add('drag-over');
+});
+
+dropZone.addEventListener('dragleave', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  this.classList.remove('drag-over');
+});
+
+dropZone.addEventListener('drop', function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  this.classList.remove('drag-over');
+  
+  const files = e.dataTransfer.files;
+  if (files.length === 0) return;
+  
+  const file = files[0];
+  if (!file.name.endsWith('.json')) {
+    alert('⚠️ Bitte nur .json-Dateien verwenden.');
+    return;
+  }
+  
+  // File dem input zuweisen und importieren
+  document.getElementById('importFile').files = files;
+  importData();
+});
+
+// ========== BEARBEITEN / LÖSCHEN ==========
+
+function openEditModal(index) {
+  const invoices = loadInvoices();
+  const invoice = invoices[index];
+  
+  document.getElementById('edit_index').value = index;
+  document.getElementById('edit_type').value = invoice.type;
+  
+  // Gemeinsame Felder befüllen
+  document.getElementById('edit_customerName').value = invoice.customerName || '';
+  document.getElementById('edit_memberEmail').value = invoice.memberEmail || '';
+  document.getElementById('edit_memberStreet').value = invoice.memberStreet || '';
+  document.getElementById('edit_memberCity').value = invoice.memberCity || '';
+  document.getElementById('edit_invoiceDate').value = invoice.invoiceDate || '';
+  document.getElementById('edit_dueDate').value = invoice.dueDate || '';
+  
+  // Typ-spezifische Felder anzeigen/ausblenden
+  if (invoice.type === 'membership') {
+    document.getElementById('editModalTitle').textContent = 'Mitgliederbeitrag bearbeiten';
+    document.getElementById('edit_membershipFields').style.display = 'block';
+    document.getElementById('edit_invoiceFields').style.display = 'none';
+    document.getElementById('edit_memberType').value = invoice.memberType || 'tier25';
+    document.getElementById('edit_year').value = invoice.year || new Date().getFullYear();
+  } else {
+    document.getElementById('editModalTitle').textContent = 'Rechnung bearbeiten';
+    document.getElementById('edit_membershipFields').style.display = 'none';
+    document.getElementById('edit_invoiceFields').style.display = 'block';
+    document.getElementById('edit_subject').value = invoice.subject || '';
+    document.getElementById('edit_invoiceNumber').value = invoice.invoiceNumber || '';
+    document.getElementById('edit_notes').value = invoice.notes || '';
+    
+    // Positionen befüllen
+    const posContainer = document.getElementById('edit-positions-list');
+    posContainer.innerHTML = '';
+    
+    if (invoice.positions && invoice.positions.length > 0) {
+      invoice.positions.forEach((pos, i) => {
+        const div = document.createElement('div');
+        div.className = 'position-item';
+        div.innerHTML = `
+          <input type="text" placeholder="Beschreibung" class="edit-pos-description" value="${pos.description || ''}" required>
+          <input type="number" step="0.01" placeholder="Menge" class="edit-pos-quantity" value="${pos.quantity || 1}" required>
+          <input type="number" step="0.01" placeholder="Einzelpreis CHF" class="edit-pos-price" value="${pos.price || 0}" required>
+          <input type="text" readonly class="edit-pos-total" value="${formatCurrency(pos.total || 0)}">
+          <button type="button" onclick="removeEditPosition(this)" ${i === 0 && invoice.positions.length === 1 ? 'disabled' : ''}>✕</button>
+        `;
+        posContainer.appendChild(div);
+      });
+    } else {
+      addEditPosition();
+    }
+    updateEditPositionListeners();
+    calculateEditInvoiceTotal();
+  }
+  
+  document.getElementById('editModal').classList.add('active');
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('active');
+}
+
+function addEditPosition() {
+  const container = document.getElementById('edit-positions-list');
+  const div = document.createElement('div');
+  div.className = 'position-item';
+  div.innerHTML = `
+    <input type="text" placeholder="Beschreibung" class="edit-pos-description" required>
+    <input type="number" step="0.01" placeholder="Menge" class="edit-pos-quantity" value="1" required>
+    <input type="number" step="0.01" placeholder="Einzelpreis CHF" class="edit-pos-price" required>
+    <input type="text" readonly class="edit-pos-total" placeholder="Total">
+    <button type="button" onclick="removeEditPosition(this)">✕</button>
+  `;
+  container.appendChild(div);
+  updateEditPositionListeners();
+}
+
+function removeEditPosition(button) {
+  button.closest('.position-item').remove();
+  calculateEditInvoiceTotal();
+}
+
+function updateEditPositionListeners() {
+  document.querySelectorAll('.edit-pos-quantity, .edit-pos-price').forEach(input => {
+    input.removeEventListener('input', calculateEditInvoiceTotal);
+    input.addEventListener('input', calculateEditInvoiceTotal);
+  });
+}
+
+function calculateEditInvoiceTotal() {
+  let total = 0;
+  document.querySelectorAll('#edit-positions-list .position-item').forEach(item => {
+    const quantity = parseFloat(item.querySelector('.edit-pos-quantity').value) || 0;
+    const price = parseFloat(item.querySelector('.edit-pos-price').value) || 0;
+    const lineTotal = quantity * price;
+    item.querySelector('.edit-pos-total').value = formatCurrency(lineTotal);
+    total += lineTotal;
+  });
+  document.getElementById('edit-invoice-total').textContent = formatCurrency(total);
+}
+
+// Speichern
+document.getElementById('editForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  
+  const index = parseInt(document.getElementById('edit_index').value);
+  const type = document.getElementById('edit_type').value;
+  const invoices = loadInvoices();
+  const invoice = invoices[index];
+  
+  // Gemeinsame Felder aktualisieren
+  invoice.customerName = document.getElementById('edit_customerName').value;
+  if (type === 'membership') invoice.memberName = invoice.customerName;
+  invoice.memberEmail = document.getElementById('edit_memberEmail').value;
+  invoice.memberStreet = document.getElementById('edit_memberStreet').value;
+  invoice.memberCity = document.getElementById('edit_memberCity').value;
+  invoice.invoiceDate = document.getElementById('edit_invoiceDate').value;
+  invoice.dueDate = document.getElementById('edit_dueDate').value;
+  
+  if (type === 'membership') {
+    invoice.memberType = document.getElementById('edit_memberType').value;
+    invoice.year = parseInt(document.getElementById('edit_year').value);
+    invoice.amount = MEMBER_TYPES[invoice.memberType].amount;
+  } else {
+    invoice.subject = document.getElementById('edit_subject').value;
+    invoice.notes = document.getElementById('edit_notes').value;
+    
+    // Positionen aktualisieren
+    const positions = [];
+    let totalAmount = 0;
+    document.querySelectorAll('#edit-positions-list .position-item').forEach(item => {
+      const description = item.querySelector('.edit-pos-description').value;
+      const quantity = parseFloat(item.querySelector('.edit-pos-quantity').value) || 0;
+      const price = parseFloat(item.querySelector('.edit-pos-price').value) || 0;
+      const total = quantity * price;
+      positions.push({ description, quantity, price, total });
+      totalAmount += total;
+    });
+    
+    if (positions.length === 0) {
+      alert("Bitte mindestens eine Position hinzufügen!");
+      return;
+    }
+    
+    invoice.positions = positions;
+    invoice.amount = totalAmount;
+  }
+  
+  saveInvoices(invoices);
+  closeEditModal();
+  render();
+  alert('Rechnung erfolgreich aktualisiert!');
+});
+
+// Löschen
+function deleteInvoice() {
+  const index = parseInt(document.getElementById('edit_index').value);
+  const invoices = loadInvoices();
+  const invoice = invoices[index];
+  
+  const confirmMsg = invoice.type === 'membership' 
+    ? `Mitgliederbeitrag für "${invoice.customerName}" (${invoice.year}) wirklich löschen?`
+    : `Rechnung "${invoice.invoiceNumber}" für "${invoice.customerName}" wirklich löschen?`;
+  
+  if (!confirm(`⚠️ ${confirmMsg}\n\nDiese Aktion kann nicht rückgängig gemacht werden.`)) {
+    return;
+  }
+  
+  invoices.splice(index, 1);
+  saveInvoices(invoices);
+  closeEditModal();
+  render();
+  alert('Rechnung wurde gelöscht.');
+}
+
+// ========== BILD-HILFSFUNKTIONEN ==========
+
+function compressImage(dataUrl, maxWidth, quality, forceJpeg) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      const mime = forceJpeg ? 'image/jpeg' : (imgFormat(dataUrl) === 'PNG' ? 'image/png' : 'image/jpeg');
+      resolve(canvas.toDataURL(mime, quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+function imgFormat(dataUrl) {
+  const mime = (dataUrl.match(/data:image\/([^;]+)/) || [])[1] || 'jpeg';
+  return (mime === 'jpg' || mime === 'jpeg') ? 'JPEG' : 'PNG';
+}
+
+function setupImageDropZone(type) {
+  const box = document.getElementById(type + '-upload-box');
+  if (!box) return;
+  box.addEventListener('dragenter', e => { e.preventDefault(); box.classList.add('drag-over'); });
+  box.addEventListener('dragover',  e => { e.preventDefault(); box.classList.add('drag-over'); });
+  box.addEventListener('dragleave', () => box.classList.remove('drag-over'));
+  box.addEventListener('drop', e => {
+    e.preventDefault();
+    box.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      const maxW = type === 'header' ? 1200 : 1240;
+      const qual = type === 'header' ? 0.82  : 0.92;
+      const jpeg = type === 'header';
+      const compressed = await compressImage(ev.target.result, maxW, qual, jpeg);
+      const s = loadSettings();
+      if (type === 'header') s.headerImage = compressed;
+      else                   s.qrImage     = compressed;
+      saveSettings(s);
+      _applyImagePreview(type, compressed);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ========== EINSTELLUNGEN ==========
+
+function loadSettings() {
+  try {
+    const d = localStorage.getItem(settingsKey());
+    return d ? JSON.parse(d) : {};
+  } catch(e) { return {}; }
+}
+
+function saveSettings(s) {
+  localStorage.setItem(settingsKey(), JSON.stringify(s));
+  scheduleSyncToGitHub();
+}
+
+function renderSettingsForm() {
+  const s = loadSettings();
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('s_name',   s.senderName);
+  set('s_email',  s.senderEmail);
+  set('s_co',     s.senderCo);
+  set('s_street', s.senderStreet);
+  set('s_city',   s.senderCity);
+  set('s_web',    s.senderWeb);
+  set('s_iban',   s.iban);
+  _applyImagePreview('header', s.headerImage || null);
+  _applyImagePreview('qr',     s.qrImage     || null);
+}
+
+function _applyImagePreview(type, dataUrl) {
+  const box  = document.getElementById(type + '-upload-box');
+  const img  = document.getElementById(type + '-preview-img');
+  const txt  = document.getElementById(type + '-preview-text');
+  if (!box) return;
+  if (dataUrl) {
+    img.src = dataUrl; img.style.display = 'block';
+    txt.style.display = 'none';
+    box.classList.add('has-image');
+  } else {
+    img.src = ''; img.style.display = 'none';
+    txt.style.display = 'block';
+    box.classList.remove('has-image');
+  }
+}
+
+function loadSettingsImage(type, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const maxW  = type === 'header' ? 1200 : 1240;
+    const qual  = type === 'header' ? 0.82  : 0.92;
+    const jpeg  = type === 'header';
+    const compressed = await compressImage(e.target.result, maxW, qual, jpeg);
+    const s = loadSettings();
+    if (type === 'header') s.headerImage = compressed;
+    else                   s.qrImage     = compressed;
+    saveSettings(s);
+    _applyImagePreview(type, compressed);
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearSettingsImage(type) {
+  const s = loadSettings();
+  if (type === 'header') s.headerImage = null;
+  else                   s.qrImage     = null;
+  saveSettings(s);
+  _applyImagePreview(type, null);
+}
+
+function saveSettingsForm() {
+  const s = loadSettings();
+  s.senderName   = document.getElementById('s_name').value.trim();
+  s.senderEmail  = document.getElementById('s_email').value.trim();
+  s.senderCo     = document.getElementById('s_co').value.trim();
+  s.senderStreet = document.getElementById('s_street').value.trim();
+  s.senderCity   = document.getElementById('s_city').value.trim();
+  s.senderWeb    = document.getElementById('s_web').value.trim();
+  s.iban         = document.getElementById('s_iban').value.trim();
+  saveSettings(s);
+  alert('✅ Einstellungen gespeichert.');
+}
+
+function updateSelectedInvoiceCount() {
+  const n = document.querySelectorAll('.invoice-checkbox:checked').length;
+  const el = document.getElementById('selectedInvoiceCount');
+  if (el) el.textContent = n;
+}
+
+function selectAllInvoiceRows() {
+  document.querySelectorAll('.invoice-checkbox').forEach(cb => cb.checked = true);
+  updateSelectedInvoiceCount();
+}
+
+function deselectAllInvoiceRows() {
+  document.querySelectorAll('.invoice-checkbox').forEach(cb => cb.checked = false);
+  updateSelectedInvoiceCount();
+}
+
+async function downloadSelectedPDFs() {
+  const checked = [...document.querySelectorAll('.invoice-checkbox:checked')];
+  if (checked.length === 0) { alert('Bitte zuerst Rechnungen auswählen.'); return; }
+  if (checked.length === 1) {
+    generatePDF(parseInt(checked[0].value));
+    return;
+  }
+  const zip = new JSZip();
+  for (const cb of checked) {
+    const result = generatePDF(parseInt(cb.value), 'blob');
+    if (result) zip.file(result.filename, result.blob);
+  }
+  const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(zipBlob);
+  a.download = `Rechnungen.zip`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function autoSaveContactFromInvoice(name, email, street, city) {
+  if (!name) return;
+  const contacts = loadContacts();
+  const existing = contacts.find(c => c.name.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    if (email)  existing.email  = email;
+    if (street) existing.street = street;
+    if (city)   existing.city   = city;
+  } else {
+    contacts.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      name, email: email || '', street: street || '', city: city || '', notes: ''
+    });
+  }
+  saveContacts(contacts);
+}
+
+// ========== PERSONEN-DATENBANK ==========
+
+function loadContacts() {
+  try {
+    const data = localStorage.getItem(contactsKey());
+    return data ? JSON.parse(data) : [];
+  } catch(e) { return []; }
+}
+
+function saveContacts(contacts) {
+  localStorage.setItem(contactsKey(), JSON.stringify(contacts));
+  scheduleSyncToGitHub();
+}
+
+function renderContactsGrid() {
+  const grid = document.getElementById('contacts-grid');
+  if (!grid) return;
+  const contacts = loadContacts();
+
+  if (contacts.length === 0) {
+    grid.innerHTML = '<p style="color:#999; font-style:italic;">Noch keine Kontakte gespeichert. Kontakte anlegen oder beim Erstellen einer Rechnung mit "💾 Als Kontakt speichern" übernehmen.</p>';
+    return;
+  }
+
+  contacts.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+
+  grid.innerHTML = contacts.map(c => `
+    <div class="contact-card">
+      <strong>${c.name}</strong>
+      <div class="contact-detail">✉️ ${c.email}</div>
+      ${c.street ? `<div class="contact-detail">🏠 ${c.street}</div>` : ''}
+      ${c.city   ? `<div class="contact-detail">📍 ${c.city}</div>` : ''}
+      ${c.notes  ? `<div class="contact-detail" style="margin-top:6px;font-style:italic">${c.notes}</div>` : ''}
+      <div class="contact-card-actions">
+        <button class="small" onclick="openContactModal('${c.id}')">✏️ Bearbeiten</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderBulkContactsGrid() {
+  const grid = document.getElementById('bulk-contacts-grid');
+  if (!grid) return;
+  const contacts = loadContacts();
+
+  if (contacts.length === 0) {
+    grid.innerHTML = '<p style="color:#999; font-style:italic;">Noch keine Kontakte gespeichert. Im Tab «Kontakte» anlegen.</p>';
+    updateBulkCount();
+    return;
+  }
+
+  contacts.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+
+  grid.innerHTML = contacts.map(c => `
+    <div class="contact-card">
+      <label>
+        <input type="checkbox" class="bulk-contact-checkbox" value="${c.id}" onchange="updateBulkCount()">
+        <div style="flex:1">
+          <strong>${c.name}</strong>
+          <div class="contact-detail">✉️ ${c.email}</div>
+          ${c.street ? `<div class="contact-detail">🏠 ${c.street}</div>` : ''}
+          ${c.city   ? `<div class="contact-detail">📍 ${c.city}</div>` : ''}
+          ${c.notes  ? `<div class="contact-detail" style="margin-top:6px;font-style:italic">${c.notes}</div>` : ''}
+        </div>
+      </label>
+    </div>
+  `).join('');
+
+  updateBulkCount();
+}
+
+function updateBulkCount() {
+  const el = document.getElementById('bulk_count');
+  if (el) el.textContent = document.querySelectorAll('.bulk-contact-checkbox:checked').length;
+}
+
+function selectAllContacts() {
+  document.querySelectorAll('.bulk-contact-checkbox').forEach(cb => cb.checked = true);
+  updateBulkCount();
+}
+
+function deselectAllContacts() {
+  document.querySelectorAll('.bulk-contact-checkbox').forEach(cb => cb.checked = false);
+  updateBulkCount();
+}
+
+function getSelectedContacts() {
+  const ids = [...document.querySelectorAll('.bulk-contact-checkbox:checked')].map(cb => cb.value);
+  return loadContacts().filter(c => ids.includes(c.id));
+}
+
+function createBulkInvoices() {
+  const selected = getSelectedContacts();
+  if (selected.length === 0) { alert('Bitte zuerst Kontakte auswählen (Häkchen setzen).'); return; }
+
+  const invoiceDate = document.getElementById('bulk_invoiceDate').value;
+  const dueDate     = document.getElementById('bulk_dueDate').value;
+  if (!invoiceDate || !dueDate) { alert('Bitte Rechnungsdatum und Fälligkeitsdatum ausfüllen.'); return; }
+
+  const subject = document.getElementById('bulk_subject').value.trim();
+  const notes   = document.getElementById('bulk_notes').value.trim();
+  const positions = [];
+  let totalAmount = 0;
+  document.querySelectorAll('#bulk-positions-list .position-item').forEach(item => {
+    const description = item.querySelector('.bulk-pos-description').value.trim();
+    const quantity    = parseFloat(item.querySelector('.bulk-pos-quantity').value) || 0;
+    const price       = parseFloat(item.querySelector('.bulk-pos-price').value) || 0;
+    const total       = quantity * price;
+    if (description) { positions.push({ description, quantity, price, total }); totalAmount += total; }
+  });
+  if (!subject) { alert('Bitte Betreff eingeben.'); return; }
+  if (positions.length === 0) { alert('Bitte mindestens eine Position mit Beschreibung ausfüllen.'); return; }
+
+  const invoiceYear = new Date(invoiceDate).getFullYear();
+  const invoices = loadInvoices();
+  const numbers  = [];
+
+  for (const contact of selected) {
+    const invoice = {
+      type: 'invoice',
+      customerName:  contact.name,
+      memberName:    contact.name,
+      memberEmail:   contact.email,
+      memberStreet:  contact.street || '',
+      memberCity:    contact.city   || '',
+      invoiceDate, dueDate, subject, notes,
+      amount: totalAmount, invoiceYear,
+      invoiceNumber: generateInvoiceNumber('invoice', invoiceYear, invoices),
+      positions,
+      paid: false, paidDate: null,
+      reminder1Date: null, reminder2Date: null, reminder3Date: null
+    };
+    invoices.push(invoice);
+    numbers.push(invoice.invoiceNumber);
+  }
+
+  saveInvoices(invoices);
+  deselectAllContacts();
+  render();
+  alert(`✅ ${numbers.length} Rechnungen erstellt:\n${numbers.join(', ')}`);
+  switchTab('overview');
+}
+
+function openContactModal(id) {
+  document.getElementById('contactForm').reset();
+  document.getElementById('contact_id').value = id || '';
+  const deleteBtn = document.getElementById('contactDeleteBtn');
+
+  if (id) {
+    const contacts = loadContacts();
+    const c = contacts.find(x => x.id === id);
+    if (!c) return;
+    document.getElementById('contactModalTitle').textContent = 'Kontakt bearbeiten';
+    document.getElementById('contact_name').value   = c.name   || '';
+    document.getElementById('contact_email').value  = c.email  || '';
+    document.getElementById('contact_street').value = c.street || '';
+    document.getElementById('contact_city').value   = c.city   || '';
+    document.getElementById('contact_notes').value  = c.notes  || '';
+    deleteBtn.style.display = 'block';
+  } else {
+    document.getElementById('contactModalTitle').textContent = 'Neuen Kontakt anlegen';
+    deleteBtn.style.display = 'none';
+  }
+
+  document.getElementById('contactModal').classList.add('active');
+}
+
+function closeContactModal() {
+  document.getElementById('contactModal').classList.remove('active');
+}
+
+function deleteContact() {
+  const id = document.getElementById('contact_id').value;
+  if (!id) return;
+  const contacts = loadContacts();
+  const c = contacts.find(x => x.id === id);
+  if (!confirm(`Kontakt "${c ? c.name : ''}" wirklich löschen?`)) return;
+  saveContacts(contacts.filter(x => x.id !== id));
+  closeContactModal();
+  renderContactsGrid();
+}
+
+document.getElementById('contactForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const contacts = loadContacts();
+  const id = document.getElementById('contact_id').value;
+  const data = {
+    id:     id || Date.now().toString(36) + Math.random().toString(36).slice(2),
+    name:   document.getElementById('contact_name').value.trim(),
+    email:  document.getElementById('contact_email').value.trim(),
+    street: document.getElementById('contact_street').value.trim(),
+    city:   document.getElementById('contact_city').value.trim(),
+    notes:  document.getElementById('contact_notes').value.trim()
+  };
+
+  if (id) {
+    const idx = contacts.findIndex(x => x.id === id);
+    if (idx >= 0) contacts[idx] = data;
+  } else {
+    contacts.push(data);
+  }
+
+  saveContacts(contacts);
+  closeContactModal();
+  renderContactsGrid();
+});
+
+// Kontakt direkt aus Formular speichern
+function saveCurrentContactFromForm(prefix) {
+  const fields = prefix === 'm'
+    ? { name: 'm_memberName', email: 'm_memberEmail', street: 'm_memberStreet', city: 'm_memberCity' }
+    : { name: 'i_customerName', email: 'i_customerEmail', street: 'i_customerStreet', city: 'i_customerCity' };
+
+  const name   = document.getElementById(fields.name).value.trim();
+  const email  = document.getElementById(fields.email).value.trim();
+  const street = document.getElementById(fields.street).value.trim();
+  const city   = document.getElementById(fields.city).value.trim();
+
+  if (!name || !email) {
+    alert('Bitte zuerst Name und E-Mail ausfüllen.');
+    return;
+  }
+
+  const contacts = loadContacts();
+  const existing = contacts.find(c => c.name.toLowerCase() === name.toLowerCase());
+
+  if (existing) {
+    if (!confirm(`Kontakt "${name}" existiert bereits.\nAngaben überschreiben?`)) return;
+    existing.email  = email  || existing.email;
+    existing.street = street || existing.street;
+    existing.city   = city   || existing.city;
+    saveContacts(contacts);
+  } else {
+    contacts.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      name, email, street, city, notes: ''
+    });
+    saveContacts(contacts);
+  }
+
+  alert(`✅ Kontakt "${name}" gespeichert.`);
+  renderContactsGrid();
+}
+
+// ========== AUTOCOMPLETE ==========
+
+function setupAutocomplete(nameId, emailId, streetId, cityId) {
+  const nameInput = document.getElementById(nameId);
+  const wrapper   = nameInput.closest('.autocomplete-wrapper');
+
+  const dropdown = document.createElement('div');
+  dropdown.className = 'autocomplete-dropdown';
+  dropdown.style.display = 'none';
+  wrapper.appendChild(dropdown);
+
+  let activeIdx = -1;
+
+  function showDropdown(matches) {
+    if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+    activeIdx = -1;
+    dropdown.innerHTML = matches.map((c, i) =>
+      `<div class="autocomplete-item" data-i="${i}"
+            data-name="${encodeURIComponent(c.name)}"
+            data-email="${encodeURIComponent(c.email)}"
+            data-street="${encodeURIComponent(c.street || '')}"
+            data-city="${encodeURIComponent(c.city || '')}">
+        <strong>${c.name}</strong>
+        <small>${c.email}${c.city ? ' · ' + c.city : ''}</small>
+      </div>`
+    ).join('');
+    dropdown.style.display = 'block';
+
+    dropdown.querySelectorAll('.autocomplete-item').forEach(item => {
+      item.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        fillFromItem(this);
+      });
+    });
+  }
+
+  function fillFromItem(item) {
+    document.getElementById(nameId).value   = decodeURIComponent(item.dataset.name);
+    document.getElementById(emailId).value  = decodeURIComponent(item.dataset.email);
+    document.getElementById(streetId).value = decodeURIComponent(item.dataset.street);
+    document.getElementById(cityId).value   = decodeURIComponent(item.dataset.city);
+    dropdown.style.display = 'none';
+    activeIdx = -1;
+  }
+
+  nameInput.addEventListener('input', function() {
+    const val = this.value.trim().toLowerCase();
+    if (!val) { dropdown.style.display = 'none'; return; }
+    const matches = loadContacts().filter(c => c.name.toLowerCase().includes(val));
+    showDropdown(matches);
+  });
+
+  nameInput.addEventListener('keydown', function(e) {
+    const items = dropdown.querySelectorAll('.autocomplete-item');
+    if (!items.length || dropdown.style.display === 'none') return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIdx = Math.min(activeIdx + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIdx = Math.max(activeIdx - 1, 0);
+    } else if (e.key === 'Enter' && activeIdx >= 0) {
+      e.preventDefault();
+      fillFromItem(items[activeIdx]);
+      return;
+    } else if (e.key === 'Escape') {
+      dropdown.style.display = 'none';
+      return;
+    }
+    items.forEach((it, i) => it.classList.toggle('highlighted', i === activeIdx));
+  });
+
+  nameInput.addEventListener('blur', function() {
+    setTimeout(() => { dropdown.style.display = 'none'; }, 150);
+  });
+}
+
+// ========== BULK-POSITIONEN ==========
+
+function addBulkPosition() {
+  const container = document.getElementById('bulk-positions-list');
+  const div = document.createElement('div');
+  div.className = 'position-item';
+  div.innerHTML = `
+    <input type="text" placeholder="Beschreibung" class="bulk-pos-description">
+    <input type="number" step="0.01" placeholder="Menge" class="bulk-pos-quantity" value="1">
+    <input type="number" step="0.01" placeholder="Einzelpreis CHF" class="bulk-pos-price">
+    <input type="text" readonly class="bulk-pos-total" placeholder="Total">
+    <button type="button" onclick="removeBulkPosition(this)">✕</button>
+  `;
+  container.appendChild(div);
+  updateBulkPositionListeners();
+}
+
+function removeBulkPosition(button) {
+  button.closest('.position-item').remove();
+  calculateBulkInvoiceTotal();
+}
+
+function updateBulkPositionListeners() {
+  document.querySelectorAll('.bulk-pos-quantity, .bulk-pos-price').forEach(input => {
+    input.removeEventListener('input', calculateBulkInvoiceTotal);
+    input.addEventListener('input', calculateBulkInvoiceTotal);
+  });
+}
+
+function calculateBulkInvoiceTotal() {
+  let total = 0;
+  document.querySelectorAll('#bulk-positions-list .position-item').forEach(item => {
+    const quantity = parseFloat(item.querySelector('.bulk-pos-quantity').value) || 0;
+    const price    = parseFloat(item.querySelector('.bulk-pos-price').value) || 0;
+    const lineTotal = quantity * price;
+    item.querySelector('.bulk-pos-total').value = formatCurrency(lineTotal);
+    total += lineTotal;
+  });
+  document.getElementById('bulk-invoice-total').textContent = formatCurrency(total);
+}
+
+
+// ========== GITHUB SYNC ==========
+const GH_CONFIG_KEY  = 'rv_gh_config';
+const GH_LAST_ORG_KEY = 'rv_last_org';
+let ghConfig = null;
+let ghShas   = {};
+let _syncTimer = null;
+let _skipSync  = false;
+
+function scheduleSyncToGitHub() {
+  if (!ghConfig || _skipSync) return;
+  setSyncBadge('saving');
+  if (_syncTimer) clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(async () => {
+    try {
+      await ghSave(ORG, {
+        version: 2,
+        invoices: loadInvoices(),
+        contacts: loadContacts(),
+        settings: loadSettings()
+      });
+      setSyncBadge('ok');
+    } catch (e) {
+      console.error('GitHub sync Fehler:', e);
+      setSyncBadge('error');
+    }
+  }, 2000);
+}
+
+function setSyncBadge(state) {
+  const el = document.getElementById('sync-badge');
+  if (!el) return;
+  const map = {
+    ok:      ['✅', 'Gespeichert in GitHub'],
+    saving:  ['⏳', 'Wird gespeichert…'],
+    error:   ['❌', 'Speicherfehler – Daten lokal gecacht'],
+    offline: ['📴', 'Kein GitHub konfiguriert']
+  };
+  const [icon, title] = map[state] || ['❓', ''];
+  el.textContent = icon;
+  el.title = title;
+}
+
+async function ghFetch(path, options = {}) {
+  const { username, token, repo } = ghConfig;
+  const url = `https://api.github.com/repos/${username}/${repo}/contents/${path}`;
+  return fetch(url, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {})
+    }
+  });
+}
+
+async function ghLoad(org) {
+  const filename = org.toLowerCase() + '.json';
+  const res = await ghFetch(filename);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GitHub ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  ghShas[filename] = data.sha;
+  return JSON.parse(decodeURIComponent(escape(atob(data.content.replace(/\n/g, '')))));
+}
+
+async function ghSave(org, data) {
+  const filename = org.toLowerCase() + '.json';
+  const content  = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+  const body     = { message: `Update ${org} ${new Date().toISOString().slice(0,10)}`, content };
+  if (ghShas[filename]) body.sha = ghShas[filename];
+  const res = await ghFetch(filename, { method: 'PUT', body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`GitHub save ${res.status}: ${await res.text()}`);
+  const result = await res.json();
+  ghShas[filename] = result.content.sha;
+}
+
+async function pullFromGitHub(org) {
+  if (!ghConfig) { setSyncBadge('offline'); return; }
+  setSyncBadge('saving');
+  try {
+    const data = await ghLoad(org);
+    if (data) {
+      _skipSync = true;
+      try {
+        if (data.invoices) saveInvoices(data.invoices);
+        if (data.contacts) saveContacts(data.contacts);
+        if (data.settings) saveSettings(data.settings);
+      } finally {
+        _skipSync = false;
+      }
+    }
+    setSyncBadge('ok');
+  } catch (e) {
+    console.error('GitHub pull Fehler:', e);
+    setSyncBadge('error');
+    alert('⚠️ GitHub konnte nicht erreicht werden. Daten aus lokalem Cache geladen.\n\n' + e.message);
+  }
+}
+
+async function switchOrg(newOrg) {
+  ORG = newOrg;
+  localStorage.setItem(GH_LAST_ORG_KEY, newOrg);
+  clearAllAppStorage();
+  document.getElementById('app-title').textContent = newOrg + ' Rechnungsverwaltung';
+  document.title = newOrg + ' Rechnungsverwaltung';
+  await pullFromGitHub(newOrg);
+  render();
+  renderContactsGrid();
+  renderBulkContactsGrid();
+  renderSettingsForm();
+}
+
+function saveGhConfigFromForm() {
+  const username = document.getElementById('gh_username').value.trim();
+  const token    = document.getElementById('gh_token').value.trim();
+  const repo     = document.getElementById('gh_repo').value.trim() || 'rechnungsverwaltung-daten';
+  if (!username || !token) { alert('Bitte Benutzername und Token eingeben.'); return; }
+  ghConfig = { username, token, repo };
+  localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(ghConfig));
+  document.getElementById('gh-setup-overlay').style.display = 'none';
+  initApp();
+}
+
+function resetGhConfig() {
+  if (!confirm('GitHub-Verbindung trennen und neu einrichten?')) return;
+  localStorage.removeItem(GH_CONFIG_KEY);
+  ghConfig = null;
+  setSyncBadge('offline');
+  document.getElementById('gh-setup-overlay').style.display = 'flex';
+}
+
+async function initApp() {
+  ghConfig = JSON.parse(localStorage.getItem(GH_CONFIG_KEY) || 'null');
+  const lastOrg = localStorage.getItem(GH_LAST_ORG_KEY) || 'VSPW';
+  ORG = lastOrg;
+  const sel = document.getElementById('org-selector');
+  if (sel) sel.value = ORG;
+  document.getElementById('app-title').textContent = ORG + ' Rechnungsverwaltung';
+  document.title = ORG + ' Rechnungsverwaltung';
+  updatePositionListeners();
+  updateBulkPositionListeners();
+  setupImageDropZone('header');
+  setupImageDropZone('qr');
+
+  if (!ghConfig) {
+    setSyncBadge('offline');
+    document.getElementById('gh-setup-overlay').style.display = 'flex';
+    render(); renderContactsGrid(); renderBulkContactsGrid(); renderSettingsForm();
+    return;
+  }
+
+  clearAllAppStorage();
+  await pullFromGitHub(ORG);
+  render(); renderContactsGrid(); renderBulkContactsGrid(); renderSettingsForm();
+
+  // Bildkomprimierung nachholen falls nötig
+  const s = loadSettings();
+  let changed = false;
+  if (s.headerImage && s.headerImage.length > 200000) { s.headerImage = await compressImage(s.headerImage, 1200, 0.82, true); changed = true; }
+  if (s.qrImage    && s.qrImage.length    > 200000) { s.qrImage     = await compressImage(s.qrImage,     1240, 0.92, false); changed = true; }
+  if (changed) { saveSettings(s); renderSettingsForm(); }
+}
+
+// Initialisierung
+document.getElementById("i_invoiceDate").valueAsDate = new Date();
+document.getElementById("i_dueDate").value = addDays(new Date().toISOString().split("T")[0], 30);
+document.getElementById("bulk_invoiceDate").valueAsDate = new Date();
+document.getElementById("bulk_dueDate").value = addDays(new Date().toISOString().split("T")[0], 30);
+setupAutocomplete('i_customerName', 'i_customerEmail', 'i_customerStreet', 'i_customerCity');
+initApp();
+</script>
+
+</body>
+</html>
